@@ -170,7 +170,7 @@ NOC-Telemetry-Dashboard/
 
 **En Windows (PowerShell):**
 ```powershell
-git clone https://github.com/mgc-dev17/NOC-Telemetry-Dashboard.git
+git clone https://github.com/mgc-cloud17/NOC-Telemetry-Dashboard.git
 cd NOC-Telemetry-Dashboard
 python -m venv venv
 .\venv\Scripts\Activate.ps1
@@ -179,7 +179,7 @@ python -m venv venv
 
 **En Linux / macOS:**
 ```bash
-git clone https://github.com/mgc-dev17/NOC-Telemetry-Dashboard.git
+git clone https://github.com/mgc-cloud17/NOC-Telemetry-Dashboard.git
 cd NOC-Telemetry-Dashboard
 python3 -m venv venv
 source venv/bin/activate
