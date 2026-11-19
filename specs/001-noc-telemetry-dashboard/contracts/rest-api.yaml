@@ -1,0 +1,174 @@
+openapi: 3.1.0
+info:
+  title: NOC Telemetry Dashboard API
+  version: 1.0.0
+  description: API REST de topología, telemetría y simulación. El flujo en tiempo real está en websocket-telemetry.md.
+paths:
+  /:
+    get:
+      summary: Dashboard HTML
+      responses:
+        "200": { description: Página del dashboard (text/html) }
+  /api/topology:
+    get:
+      summary: Topología estática
+      responses:
+        "200":
+          description: Nodos y enlaces
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Topology" }
+  /api/telemetry/latest:
+    get:
+      summary: Último snapshot de telemetría
+      responses:
+        "200":
+          description: Último snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TelemetrySnapshot" }
+        "503":
+          description: Aún no hay snapshot (primer ciclo pendiente)
+  /api/events:
+    get:
+      summary: Últimos eventos de alerta (máx. 100, más recientes primero)
+      responses:
+        "200":
+          description: Lista de eventos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlertEvent" }
+  /api/config:
+    get:
+      summary: Configuración pública para el cliente (sin secretos)
+      responses:
+        "200":
+          description: Modo y parámetros de UI
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [simulation, poll_interval_seconds]
+                properties:
+                  simulation: { type: boolean }
+                  poll_interval_seconds: { type: number }
+  /api/simulate/toggle-node/{node_id}:
+    post:
+      summary: Alterna caída/restauración de un nodo (solo SIMULATION_MODE=true)
+      parameters:
+        - { name: node_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Nuevo estado forzado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ToggleResult" }
+        "404": { description: node_id inexistente, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: Modo simulación desactivado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /api/simulate/toggle-link/{edge_id}:
+    post:
+      summary: Alterna caída/restauración de un enlace (solo SIMULATION_MODE=true)
+      parameters:
+        - { name: edge_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Nuevo estado forzado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ToggleResult" }
+        "404": { description: edge_id inexistente, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: Modo simulación desactivado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+components:
+  schemas:
+    Status: { type: string, enum: [up, degraded, down] }
+    Interface:
+      type: object
+      required: [name, if_index]
+      properties:
+        name: { type: string, example: GigabitEthernet0/1 }
+        if_index: { type: integer }
+    Topology:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [id, name, ip, type, role, position]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              ip: { type: string, format: ipv4 }
+              type: { type: string, enum: [router, switch, server] }
+              role: { type: string }
+              position:
+                type: object
+                properties: { x: { type: integer }, y: { type: integer } }
+        edges:
+          type: array
+          items:
+            type: object
+            required: [id, source, target, source_if, target_if]
+            properties:
+              id: { type: string }
+              source: { type: string }
+              target: { type: string }
+              source_if: { $ref: "#/components/schemas/Interface" }
+              target_if: { $ref: "#/components/schemas/Interface" }
+    NodeTelemetry:
+      type: object
+      required: [id, status, latency_ms, packet_loss, cpu_percent, bw_in_kbps, bw_out_kbps]
+      properties:
+        id: { type: string }
+        status: { $ref: "#/components/schemas/Status" }
+        latency_ms: { type: [number, "null"] }
+        packet_loss: { type: number, minimum: 0, maximum: 100 }
+        cpu_percent: { type: [number, "null"], minimum: 0, maximum: 100 }
+        bw_in_kbps: { type: number, minimum: 0 }
+        bw_out_kbps: { type: number, minimum: 0 }
+    EdgeTelemetry:
+      type: object
+      required: [id, status, oper_status, bw_in_kbps, bw_out_kbps]
+      properties:
+        id: { type: string }
+        status: { $ref: "#/components/schemas/Status" }
+        oper_status: { type: [integer, "null"] }
+        bw_in_kbps: { type: number, minimum: 0 }
+        bw_out_kbps: { type: number, minimum: 0 }
+    AlertEvent:
+      type: object
+      required: [id, timestamp, element_type, element_id, kind, previous, current, message]
+      properties:
+        id: { type: integer }
+        timestamp: { type: string, format: date-time }
+        element_type: { type: string, enum: [node, edge] }
+        element_id: { type: string }
+        kind: { type: string, enum: [down, degraded, recovered] }
+        previous: { $ref: "#/components/schemas/Status" }
+        current: { $ref: "#/components/schemas/Status" }
+        message: { type: string }
+    TelemetrySnapshot:
+      type: object
+      required: [type, timestamp, simulation, nodes, edges, events]
+      properties:
+        type: { type: string, const: telemetry }
+        timestamp: { type: string, format: date-time }
+        simulation: { type: boolean }
+        nodes: { type: array, items: { $ref: "#/components/schemas/NodeTelemetry" } }
+        edges: { type: array, items: { $ref: "#/components/schemas/EdgeTelemetry" } }
+        events: { type: array, items: { $ref: "#/components/schemas/AlertEvent" } }
+    ToggleResult:
+      type: object
+      required: [id, forced_down, status]
+      properties:
+        id: { type: string }
+        forced_down: { type: boolean, description: true si queda forzado a caído }
+        status: { $ref: "#/components/schemas/Status" }
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }

@@ -1,0 +1,8 @@
+﻿# Variables de entorno locales (con IPs/configuración de laboratorio)
+.env
+*.key
+
+# Entorno virtual y caché de Python
+venv/
+__pycache__/
+*.py[cod]

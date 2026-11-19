@@ -1,0 +1,14 @@
+# Dependencias fijadas para Python 3.12
+# pysnmp-lextudio==6.3.0 expone API asyncio en pysnmp.hlapi.asyncio usando
+# camelCase `getCmd` (corutina async) y `UdpTransportTarget((ip, port), timeout, retries)`.
+fastapi==0.164.0
+uvicorn[standard]==0.54.0
+websockets==17.4
+python-dotenv==1.2.4
+icmplib==3.0.4
+pysnmp-lextudio==6.3.0
+pytest==9.2.0
+httpx==0.28.1
+pytest-asyncio==1.5.0
+jinja2==3.1.6
+jsonschema==4.26.0

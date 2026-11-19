@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyber-NOC // Tactical Command Center</title>
+
+  <!-- Tipografías: Space Grotesk (títulos) + JetBrains Mono (métricas, IPs, logs) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+
+  <!-- Tailwind CSS (CDN zero-build) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['"Space Grotesk"', "ui-sans-serif", "system-ui", "sans-serif"],
+            mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
+          },
+          colors: {
+            abyss: "#05080f",
+            cyber: { cyan: "#06b6d4", violet: "#8b5cf6", magenta: "#d946ef" },
+          },
+        },
+      },
+    };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .glass-panel {
+        @apply rounded-2xl bg-slate-950/80 backdrop-blur-md border border-cyan-500/20 shadow-[0_0_25px_rgba(6,182,212,0.08)];
+      }
+    }
+  </style>
+  <link rel="stylesheet" href="/static/css/noc_theme.css">
+
+  <!-- Cytoscape.js y Chart.js (CDN con versión fijada) -->
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+  <script src="/static/js/noc_dashboard.js" defer></script>
+</head>
+<body class="noc-body min-h-screen text-slate-200 antialiased">
+  <!-- ================= HEADER HUD ================= -->
+  <header class="sticky top-0 z-30 border-b border-cyan-500/15 bg-[#05080f]/85 backdrop-blur-md">
+    <div class="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 lg:px-6">
+      <div class="flex min-w-0 items-center gap-3">
+        <span class="hud-logo" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <circle cx="16" cy="16" r="13" stroke-opacity="0.45"></circle>
+            <circle cx="16" cy="16" r="8.5" stroke-opacity="0.7"></circle>
+            <circle cx="16" cy="16" r="2.2" fill="currentColor" stroke="none"></circle>
+            <g class="sweep">
+              <path d="M16 16 L16 3" stroke="#8b5cf6" stroke-width="2"></path>
+            </g>
+            <circle cx="22.5" cy="9.5" r="1.4" fill="#00f59b" stroke="none"></circle>
+          </svg>
+        </span>
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="hud-badge">NOC // LIVE TELEMETRY</span>
+            <span id="mode-badge" class="mode-badge" data-mode="unknown">MODE · ---</span>
+          </div>
+          <h1 class="mt-1 font-display text-lg font-semibold tracking-tight text-white sm:text-xl">
+            Cyber-NOC <span class="text-cyan-400">Tactical Command Center</span>
+          </h1>
+        </div>
+      </div>
+
+      <div class="hud-clock-wrap">
+        <span class="micro-label">T-ZULU</span>
+        <time id="utc-clock" class="hud-clock">--:--:-- UTC</time>
+        <span class="hud-divider" aria-hidden="true"></span>
+        <span id="last-sync" class="micro-label">CICLO --:--:--</span>
+      </div>
+
+      <div class="ml-auto flex flex-wrap items-center gap-2">
+        <div id="ws-status" class="ws-indicator" role="status" aria-live="polite" data-state="reconnecting">
+          <span id="ws-dot" class="ws-dot" aria-hidden="true"></span>
+          <span id="ws-label">RECONNECTING</span>
+        </div>
+        <ul class="flex flex-wrap items-center gap-2" aria-label="Resumen de estado de nodos">
+          <li class="kpi-pill" data-kind="up"><span class="kpi-dot" aria-hidden="true"></span>ONLINE <strong id="kpi-up">0</strong></li>
+          <li class="kpi-pill" data-kind="degraded"><span class="kpi-dot" aria-hidden="true"></span>DEGRADED <strong id="kpi-degraded">0</strong></li>
+          <li id="kpi-down-pill" class="kpi-pill" data-kind="down"><span class="kpi-dot" aria-hidden="true"></span>CRITICAL <strong id="kpi-down">0</strong></li>
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-[1800px] p-4 lg:p-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+      <!-- ================= COLUMNA IZQUIERDA: RADAR + SIMULACIÓN + EVENTOS ================= -->
+      <div class="lg:col-span-7 flex flex-col gap-4 min-w-0">
+        <!-- ================= RADAR DE TOPOLOGÍA ================= -->
+        <section aria-labelledby="map-title" class="glass-panel flex min-w-0 flex-col overflow-hidden">
+        <div class="panel-head">
+          <h2 id="map-title" class="panel-title"><span class="panel-index">01</span>Topology Radar</h2>
+          <ul class="flex flex-wrap items-center gap-4" aria-label="Leyenda de estados operativos">
+            <li class="legend-item"><span class="legend-dot" style="--dot:#00f59b" aria-hidden="true"></span>UP · ONLINE</li>
+            <li class="legend-item"><span class="legend-dot" style="--dot:#ffb703" aria-hidden="true"></span>DEGRADED</li>
+            <li class="legend-item"><span class="legend-dot" style="--dot:#ff2a5f" aria-hidden="true"></span>DOWN · CRITICAL</li>
+          </ul>
+        </div>
+
+        <div class="blueprint h-[58vh] min-h-[460px]">
+          <div class="radar-rings" aria-hidden="true"></div>
+          <div class="radar-sweep" aria-hidden="true"></div>
+          <div id="cy" role="region" aria-label="Grafo interactivo de topología de red"></div>
+          <div class="hud-corners" aria-hidden="true"></div>
+
+          <div class="absolute left-4 top-4 z-10 flex flex-wrap gap-2" role="toolbar" aria-label="Controles de layout del mapa">
+            <button type="button" class="hud-btn" data-layout="hierarchical" aria-pressed="true">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="6" y="1.5" width="4" height="3" rx="0.8"/><rect x="1.5" y="11.5" width="4" height="3" rx="0.8"/><rect x="10.5" y="11.5" width="4" height="3" rx="0.8"/><path d="M8 4.5v3.5M3.5 11.5V8h9v3.5"/></svg>
+              Jerárquico
+            </button>
+            <button type="button" class="hud-btn" data-layout="radial" aria-pressed="false">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke-opacity="0.6"/><circle cx="8" cy="8" r="3.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>
+              Radial
+            </button>
+            <button id="center-map-btn" type="button" class="hud-btn">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 5V1.5H5M11 1.5h3.5V5M14.5 11v3.5H11M5 14.5H1.5V11"/><circle cx="8" cy="8" r="2"/></svg>
+              Centrar Mapa
+            </button>
+          </div>
+
+          <p id="map-meta" class="map-overlay-text absolute bottom-4 left-4 z-10">NODES 0 · LINKS 0</p>
+          <p class="map-overlay-text absolute bottom-4 right-4 z-10 hidden sm:block">Click nodo → Inspector</p>
+        </div>
+      </section>
+
+        <!-- ================= DOCK DE SIMULACIÓN Y EVENTOS ================= -->
+        <div id="dock" class="flex flex-col gap-4">
+          <section id="sim-controls" aria-labelledby="sim-title" class="glass-panel hidden flex-col overflow-hidden">
+            <div class="panel-head">
+              <h2 id="sim-title" class="panel-title"><span class="panel-index">03</span>Fault Injection</h2>
+              <span class="mode-badge" data-mode="sim">SIMULATION_MODE</span>
+            </div>
+            <div class="flex flex-col gap-3 p-4">
+              <p class="text-xs text-slate-400">Interruptor verde = operativo. Desliza a rojo para inyectar una falla en vivo y observar la propagación en el radar.</p>
+              <h3 class="micro-label">Nodos</h3>
+              <ul id="sim-node-list" class="flex flex-col gap-2"></ul>
+              <h3 class="micro-label mt-1">Enlaces</h3>
+              <ul id="sim-edge-list" class="flex flex-col gap-2"></ul>
+              <p id="sim-feedback" role="status" aria-live="polite" class="mono min-h-[1.1rem] text-[11px] text-slate-400"></p>
+            </div>
+          </section>
+
+          <section id="events-log" aria-labelledby="events-title" class="glass-panel flex min-w-0 flex-col overflow-hidden">
+            <div class="panel-head">
+              <h2 id="events-title" class="panel-title"><span class="panel-index">04</span>Event Stream</h2>
+              <div class="flex items-center gap-3">
+                <span class="legend-item"><span class="text-[#00f59b]">[OK]</span><span class="text-[#ffb703]">[WARN]</span><span class="text-[#ff2a5f]">[CRIT]</span></span>
+                <span id="events-count" class="micro-label">0 líneas</span>
+              </div>
+            </div>
+            <div class="terminal-shell">
+              <div class="terminal-bar" aria-hidden="true">
+                <span class="dot bg-[#ff2a5f]"></span><span class="dot bg-[#ffb703]"></span><span class="dot bg-[#00f59b]"></span>
+                <span class="ml-2">noc@telemetry:~$ tail -f /var/log/noc/events.log</span>
+                <span class="terminal-caret"></span>
+              </div>
+              <ol id="events-list" class="terminal" role="log" aria-label="Bitácora de eventos de red">
+                <li id="events-empty" class="log-empty">Esperando eventos del flujo de telemetría…</li>
+              </ol>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ================= COLUMNA DERECHA: INSPECTOR HUD ================= -->
+      <aside id="node-panel" aria-labelledby="inspector-title" class="glass-panel lg:col-span-5 flex min-w-0 flex-col overflow-hidden">
+        <div class="panel-head">
+          <h2 id="inspector-title" class="panel-title"><span class="panel-index">02</span>Node Inspector</h2>
+          <button id="close-panel-btn" type="button" class="hud-btn hidden" aria-label="Cerrar inspector de nodo">✕ Cerrar</button>
+        </div>
+
+        <div class="px-4 pt-3">
+          <p class="micro-label">Acceso rápido</p>
+          <div id="node-quick-select" class="mt-2 flex flex-wrap gap-2"></div>
+        </div>
+
+        <div id="panel-empty" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+          <svg width="72" height="72" viewBox="0 0 72 72" fill="none" stroke="#06b6d4" stroke-width="1.5" aria-hidden="true">
+            <circle cx="36" cy="36" r="30" stroke-opacity="0.3"/>
+            <circle cx="36" cy="36" r="18" stroke-opacity="0.55" stroke-dasharray="3 4"/>
+            <path d="M36 2v14M36 56v14M2 36h14M56 36h14" stroke="#8b5cf6"/>
+            <circle cx="36" cy="36" r="3" fill="#06b6d4"/>
+          </svg>
+          <p class="font-display text-sm font-semibold tracking-[0.2em] text-cyan-200">SIN OBJETIVO SELECCIONADO</p>
+          <p class="max-w-xs text-xs text-slate-400">Haz clic sobre un nodo del radar o usa el acceso rápido para abrir su ficha técnica y telemetría en vivo.</p>
+        </div>
+
+        <div id="panel-content" class="hidden flex-col gap-4 p-4">
+          <div class="flex items-center gap-4">
+            <span id="panel-icon-wrap" class="inspector-icon-wrap">
+              <img id="panel-node-icon" src="data:," alt="" width="52" height="52">
+            </span>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 id="panel-node-title" class="font-display text-lg font-bold text-white">--</h3>
+                <span id="panel-node-status" class="status-chip" data-status="unknown">N/D</span>
+              </div>
+              <p id="panel-node-ip" class="mono mt-0.5 text-sm text-cyan-300">--</p>
+              <p id="panel-node-role" class="micro-label mt-1">--</p>
+            </div>
+          </div>
+
+          <div class="metric-block">
+            <div class="flex items-baseline justify-between">
+              <span class="micro-label">Latencia ICMP</span>
+              <span id="spec-latency" class="metric-value">N/D</span>
+            </div>
+            <div id="bar-latency" class="seg-bar" role="meter" aria-label="Latencia ICMP en milisegundos" aria-valuemin="0" aria-valuemax="200" aria-valuenow="0"></div>
+            <div class="seg-scale" aria-hidden="true"><span>0</span><span>150 ms · umbral</span><span>200+</span></div>
+          </div>
+
+          <div class="metric-block">
+            <div class="flex items-baseline justify-between">
+              <span class="micro-label">Packet Loss</span>
+              <span id="spec-loss" class="metric-value">N/D</span>
+            </div>
+            <div id="bar-loss" class="seg-bar" role="meter" aria-label="Pérdida de paquetes en porcentaje" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+            <div class="seg-scale" aria-hidden="true"><span>0%</span><span>50%</span><span>100%</span></div>
+          </div>
+
+          <dl class="grid grid-cols-3 gap-2">
+            <div class="stat-tile"><dt class="micro-label">CPU</dt><dd id="spec-cpu">N/D</dd></div>
+            <div class="stat-tile"><dt class="micro-label">RX In</dt><dd id="spec-bw-in">N/D</dd></div>
+            <div class="stat-tile"><dt class="micro-label">TX Out</dt><dd id="spec-bw-out">N/D</dd></div>
+          </dl>
+
+          <figure class="chart-card">
+            <figcaption class="micro-label mb-2">Ancho de banda (Kbps) · últimas 40 muestras</figcaption>
+            <div class="h-40">
+              <canvas id="chart-bw" role="img" aria-label="Gráfica de ancho de banda de entrada y salida en Kbps"></canvas>
+            </div>
+          </figure>
+
+          <figure class="chart-card">
+            <figcaption class="micro-label mb-2">Carga de CPU (%) · mapa térmico</figcaption>
+            <div class="h-40">
+              <canvas id="chart-cpu" role="img" aria-label="Gráfica de uso de CPU en porcentaje"></canvas>
+            </div>
+          </figure>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <div id="edge-tooltip" role="tooltip" style="position: fixed; pointer-events: none; z-index: 9999; margin: 0;" class="hidden rounded-lg border border-cyan-500/40 bg-slate-950/90 px-3 py-2 font-mono text-xs text-slate-200 shadow-lg backdrop-blur-md"></div>
+</body>
+</html>

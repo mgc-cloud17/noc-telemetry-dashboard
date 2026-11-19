@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "telemetry-message.schema.json",
+  "title": "TelemetryMessage",
+  "type": "object",
+  "required": ["type", "timestamp", "simulation", "nodes", "edges", "events"],
+  "additionalProperties": false,
+  "properties": {
+    "type": { "const": "telemetry" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "simulation": { "type": "boolean" },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "latency_ms", "packet_loss", "cpu_percent", "bw_in_kbps", "bw_out_kbps"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "enum": ["up", "degraded", "down"] },
+          "latency_ms": { "type": ["number", "null"], "minimum": 0 },
+          "packet_loss": { "type": "number", "minimum": 0, "maximum": 100 },
+          "cpu_percent": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+          "bw_in_kbps": { "type": "number", "minimum": 0 },
+          "bw_out_kbps": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "oper_status", "bw_in_kbps", "bw_out_kbps"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "enum": ["up", "degraded", "down"] },
+          "oper_status": { "type": ["integer", "null"] },
+          "bw_in_kbps": { "type": "number", "minimum": 0 },
+          "bw_out_kbps": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "timestamp", "element_type", "element_id", "kind", "previous", "current", "message"],
+        "properties": {
+          "id": { "type": "integer" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "element_type": { "enum": ["node", "edge"] },
+          "element_id": { "type": "string" },
+          "kind": { "enum": ["down", "degraded", "recovered"] },
+          "previous": { "enum": ["up", "degraded", "down"] },
+          "current": { "enum": ["up", "degraded", "down"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}
